@@ -82,6 +82,7 @@ export default function PinsAdminPage () {
                 <table className="table-auto whitespace-nowrap min-w-full">
                     <thead>
                         <tr className="text-left">
+                            <th className="p-2">Lp.</th>
                             <th className="p-2">N</th>
                             <th className="p-2">PKT</th>
                             <th className="p-2">Nazwa</th>
@@ -102,6 +103,7 @@ export default function PinsAdminPage () {
 
                             return (
                                 <tr key={pin.uid} className={index % 2 ? 'bg-background' : ''}>
+                                    <td className="p-2">{index + 1}</td>
                                     <td className="p-2">{finders.length}</td>
                                     <td className="p-2">{pin.value}</td>
                                     <td className="p-2">

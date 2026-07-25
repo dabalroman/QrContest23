@@ -98,6 +98,7 @@ export default function PinFeedbackAdminPage () {
                         <table className="table-auto whitespace-nowrap min-w-full">
                             <thead>
                                 <tr className="text-left">
+                                    <th className="p-2">Lp.</th>
                                     <th className="p-2">Ocena</th>
                                     <th className="p-2">Prelekcja</th>
                                     <th className="p-2">Osoba</th>
@@ -110,6 +111,7 @@ export default function PinFeedbackAdminPage () {
                                         key={row.username + row.collectedAt.getTime()}
                                         className={index % 2 ? 'bg-background' : ''}
                                     >
+                                        <td className="p-2">{index + 1}</td>
                                         <td className="p-2">{row.rating}</td>
                                         <td className="p-2">{row.talkName}</td>
                                         <td className="p-2">{row.username}</td>

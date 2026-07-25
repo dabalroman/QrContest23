@@ -88,6 +88,7 @@ export default function UsersAdminPage () {
                 <table className="table-auto whitespace-nowrap min-w-full">
                     <thead>
                         <tr className="text-left">
+                            <th className="p-2">Lp.</th>
                             <th className="p-2">Nick</th>
                             <th className="p-2">Wynik</th>
                             <th className="p-2"># pinezek</th>
@@ -99,6 +100,7 @@ export default function UsersAdminPage () {
                     <tbody>
                         {users.map((user, index) => (
                             <tr key={user.uid} className={index % 2 ? 'bg-background' : ''}>
+                                <td className="p-2">{index + 1}</td>
                                 <td className="p-2">{user.username}</td>
                                 <td className="p-2">{user.score}</td>
                                 <td className="p-2">{user.amountOfCollectedPins}</td>

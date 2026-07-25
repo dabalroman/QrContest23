@@ -73,6 +73,7 @@ export default function RecentlyCollectedPinsAdminPage () {
                 <table className="table-auto whitespace-nowrap min-w-full">
                     <thead>
                         <tr className="text-left">
+                            <th className="p-2">Lp.</th>
                             <th className="p-2">Pinezka</th>
                             <th className="p-2">Osoba</th>
                             <th className="p-2">Data</th>
@@ -84,6 +85,7 @@ export default function RecentlyCollectedPinsAdminPage () {
                                 key={entry.uid + entry.username + entry.collectedAt.getTime()}
                                 className={index % 2 ? 'bg-background' : ''}
                             >
+                                <td className="p-2">{index + 1}</td>
                                 <td className="p-2">
                                     <button
                                         type="button"
