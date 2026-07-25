@@ -164,6 +164,28 @@ test('approve awards the value, fans out, clears pendingScore', async () => {
     assert.equal(submission.reviewedBy, 'photo-admin-1');
 });
 
+// The bug behind task #77: approval must move the location-scope numerator, or a pinsInScope badge
+// whose last pin is a photo can never complete. The fixture photo pin sits in groups ['test'] / mapId
+// 'test-map', so approval increments its group/map/type scope keys - and NOT before, while pending.
+test('approve increments the scope counters (nothing while pending)', async () => {
+    const uid = 'photo-scope-1';
+    const token = await registerPlayer(uid, 'PhotoScope1');
+    const adminToken = await registerAdmin('photo-admin-scope', 'PhotoAdminScope');
+    await seedPhotoObject(uid, PIN_PHOTO_UID);
+
+    const { submissionUid } = await callCallable('submitPhotoHandle', { pinUid: PIN_PHOTO_UID }, token);
+
+    const pending = (await db.collection('users').doc(uid).get()).data();
+    assert.equal(pending.collectedPinsByScope['map:test-map'], undefined, 'no scope counter while pending');
+
+    await callCallable('reviewPhotoHandle', { submissionUid, decision: 'approve' }, adminToken);
+
+    const user = (await db.collection('users').doc(uid).get()).data();
+    assert.equal(user.collectedPinsByScope['group:test'], 1, 'group scope incremented on approve');
+    assert.equal(user.collectedPinsByScope['map:test-map'], 1, 'map scope incremented on approve');
+    assert.equal(user.collectedPinsByScope['type:photo'], 1, 'type scope incremented on approve');
+});
+
 // --- reject ---
 
 test('reject clears pendingScore, awards nothing, and REOPENS the pin', async () => {

@@ -54,6 +54,18 @@ export const getPhotoSubmissionsFunction: HttpsCallable<
     { submissions: RawPhotoSubmission[] }
 > = httpsCallable(functions, 'getPhotoSubmissionsHandle');
 
+// Admin-only repair: rebuild collectedPinsByScope from source-of-truth and grant any missing badges.
+// { uid } fixes one player; {} fixes everyone. See recheckAchievementsHandle.
+export const recheckAchievementsFunction: HttpsCallable<
+    { uid?: string },
+    {
+        usersProcessed: number,
+        usersFailed: number,
+        totalGranted: number,
+        grants: Record<string, RawAchievementGrant[]>
+    }
+> = httpsCallable(functions, 'recheckAchievementsHandle');
+
 export const answerQuestionFunction: HttpsCallable<
     { uid: string, answer: string },
     { correct: boolean, correctAnswer: QuestionAnswerValue, achievements: RawAchievementGrant[] }

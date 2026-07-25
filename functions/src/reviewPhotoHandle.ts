@@ -1,10 +1,11 @@
 import { FieldValue, getFirestore, UpdateData } from 'firebase-admin/firestore';
 import { PhotoSubmission, PhotoSubmissionStatus } from './types/photoSubmission';
-import { PinCollectedBy } from './types/pin';
+import { Pin, PinCollectedBy } from './types/pin';
 import { User } from './types/user';
 import { AchievementGrant } from './types/achievement';
 import getCurrentUser, { readUserInTransaction } from './actions/getCurrentUser';
 import awardPoints from './actions/awardPoints';
+import scopeKeys from './actions/pinScopeKeys';
 import assertAdmin from './actions/assertAdmin';
 import { photoBucket } from './actions/photoStorage';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -62,6 +63,16 @@ export const reviewPhotoHandle = onCall(async (req): Promise<{ status: string, a
             // user doc serializes concurrent same-user awards (see readUserInTransaction).
             const user = await readUserInTransaction(transaction, userRef);
 
+            // Resolve the scope keys to award BEFORE any write (Firestore forbids a read after a write).
+            // Prefer the snapshotted sub.scopeKeys, but fall back to recomputing from the live pin for
+            // submissions written before submitPhotoHandle persisted them (or by an older deploy) - an
+            // empty list would otherwise silently skip the location-scope increment.
+            let awardScopeKeys: string[] = sub.scopeKeys ?? [];
+            if (decision === 'approve' && awardScopeKeys.length === 0) {
+                const pinSnapshot = await transaction.get(pinRef);
+                awardScopeKeys = pinSnapshot.exists ? scopeKeys(pinSnapshot.data() as Pin) : [];
+            }
+
             transaction.update<User, User>(userRef, {
                 pendingScore: FieldValue.increment(-sub.value)
             } as UpdateData<User>);
@@ -77,7 +88,7 @@ export const reviewPhotoHandle = onCall(async (req): Promise<{ status: string, a
                 // Route through the shared action - real score + 4-place fan-out + achievements +
                 // location scope counters. Never hand-roll the fan-out.
                 return await awardPoints(
-                    db, transaction, userRef, user, sub.value, { amountOfCollectedPins: 1 }, sub.scopeKeys
+                    db, transaction, userRef, user, sub.value, { amountOfCollectedPins: 1 }, awardScopeKeys
                 );
             }
 
