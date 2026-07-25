@@ -14,6 +14,10 @@ const nextConfig = {
             {
                 source: '/clue/:cardId',
                 destination: '/clue'
+            },
+            {
+                source: '/admin/user/:uid',
+                destination: '/admin/user'
             }
         ];
     }

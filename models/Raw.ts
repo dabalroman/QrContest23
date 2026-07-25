@@ -95,6 +95,32 @@ export interface RawPhotoSubmission {
     photoUrl: string | null
 }
 
+// The two lists of the admin per-player drill-down (#79), as they arrive from getUserDetailsHandle.
+// Like RawPhotoSubmission these go straight through the callable with no client model - neither
+// collection is client-readable, so nothing else in the app can ever hold one.
+export interface RawUserDetailsPin {
+    uid: Uid,
+    name: string,
+    type: PinType,
+    value: number,
+    awardedPoints: number,
+    collectedAt: RawFirestoreTimestamp
+}
+
+// `question`/`answers` are null when the uid is gone from the questions doc. `given` is null for a
+// question drawn but never answered - so `isCorrect: false` alone does NOT mean "answered wrong",
+// and the three states must be told apart by `given` first.
+export interface RawUserDetailsQuestion {
+    uid: Uid,
+    question: string | null,
+    answers: StringMap | null,
+    given: string | null,
+    correct: string | null,
+    isCorrect: boolean,
+    value: number,
+    collectedAt: RawFirestoreTimestamp | null
+}
+
 // An achievement granted during an award, as it arrives in a callable response (the #30 unlock toast
 // consumes it). `icon` is a string KEY the client maps to a FontAwesome icon - never an IconDefinition.
 export interface RawAchievementGrant {

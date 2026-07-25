@@ -16,6 +16,7 @@ import {deletePinHandle} from './deletePinHandle';
 import {submitPhotoHandle} from './submitPhotoHandle';
 import {reviewPhotoHandle} from './reviewPhotoHandle';
 import {getPhotoSubmissionsHandle} from './getPhotoSubmissionsHandle';
+import {getUserDetailsHandle} from './getUserDetailsHandle';
 import {recheckAchievementsHandle} from './recheckAchievementsHandle';
 import {onSchedule} from "firebase-functions/scheduler";
 import {logger} from "firebase-functions";
@@ -27,7 +28,8 @@ import assertAdmin from "./actions/assertAdmin";
 export {
     setupAccountHandle, seedDatabaseHandle, collectCardHandle, answerQuestionHandle, joinGuildHandle,
     collectPinHandle, getPinsHandle, upsertPinHandle, deletePinHandle,
-    submitPhotoHandle, reviewPhotoHandle, getPhotoSubmissionsHandle, recheckAchievementsHandle
+    submitPhotoHandle, reviewPhotoHandle, getPhotoSubmissionsHandle, getUserDetailsHandle,
+    recheckAchievementsHandle
 };
 
 export const updateRoundsHandle = onCall(async (req): Promise<{}> => {

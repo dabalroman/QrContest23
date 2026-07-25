@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import ScreenTitle from '@/components/ScreenTitle';
 import Panel from '@/components/Panel';
 import Button, { ButtonState } from '@/components/Button';
@@ -6,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { collection, onSnapshot, orderBy, query } from '@firebase/firestore';
 import { firestore } from '@/utils/firebase';
 import { FireDoc } from '@/Enum/FireDoc';
+import { Page } from '@/Enum/Page';
 import { recheckAchievementsFunction } from '@/utils/functions';
 import useDynamicNavbar from '@/hooks/useDynamicNavbar';
 import { faArrowLeft } from '@fortawesome/free-solid-svg-icons';
@@ -101,7 +103,11 @@ export default function UsersAdminPage () {
                         {users.map((user, index) => (
                             <tr key={user.uid} className={index % 2 ? 'bg-background' : ''}>
                                 <td className="p-2">{index + 1}</td>
-                                <td className="p-2">{user.username}</td>
+                                <td className="p-2">
+                                    <Link className="underline" href={`${Page.ADMIN_USER}/${user.uid}`}>
+                                        {user.username}
+                                    </Link>
+                                </td>
                                 <td className="p-2">{user.score}</td>
                                 <td className="p-2">{user.amountOfCollectedPins}</td>
                                 <td className="p-2">{user.amountOfAnsweredQuestions}</td>

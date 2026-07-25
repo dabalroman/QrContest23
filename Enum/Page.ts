@@ -19,6 +19,8 @@ export enum Page {
     ADMIN_PINS = '/admin/pins',
     ADMIN_RECENTLY_COLLECTED = '/admin/recently-collected',
     ADMIN_USERS = '/admin/users',
+    ADMIN_USER = '/admin/user',
+    ADMIN_ACHIEVEMENTS = '/admin/achievements',
     ADMIN_PHOTO_REVIEW = '/admin/photo-review',
     ADMIN_FEEDBACK = '/admin/feedback',
 }

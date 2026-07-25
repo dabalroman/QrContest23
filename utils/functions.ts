@@ -2,7 +2,7 @@ import { HttpsCallable, httpsCallable } from '@firebase/functions';
 import { functions } from '@/utils/firebase';
 import {
     RawAchievementGrant, RawCard, RawCollectedPin, RawPhotoSubmission, RawPin, RawPinAuthoredFields,
-    RawQuestion
+    RawQuestion, RawUserDetailsPin, RawUserDetailsQuestion
 } from '@/models/Raw';
 import { QuestionAnswerValue } from '@/functions/src/types/question';
 
@@ -53,6 +53,13 @@ export const getPhotoSubmissionsFunction: HttpsCallable<
     {},
     { submissions: RawPhotoSubmission[] }
 > = httpsCallable(functions, 'getPhotoSubmissionsHandle');
+
+// Admin-only, read-only: one player's collected pins + every question they drew, for the drill-down
+// at /admin/user/:uid (#79). Both collections are unreadable by any client, hence the callable.
+export const getUserDetailsFunction: HttpsCallable<
+    { uid: string },
+    { pins: RawUserDetailsPin[], questions: RawUserDetailsQuestion[] }
+> = httpsCallable(functions, 'getUserDetailsHandle');
 
 // Admin-only repair: rebuild collectedPinsByScope from source-of-truth and grant any missing badges.
 // { uid } fixes one player; {} fixes everyone. See recheckAchievementsHandle.
