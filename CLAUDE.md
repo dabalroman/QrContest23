@@ -152,7 +152,7 @@ functions/src/    Cloud Functions. Handlers at the root, actions/ for shared tra
                   achievements/ for the grant engine, types/ for the ADMIN-side types, seeds/ for the
                   seed data, data/forbiddenPhrases.ts
 public/maps/      The 9 map images (see §12.1). Filenames must match the registry in utils/maps.ts.
-public/           Static assets: cards/ (64), cards-thumbnails/ (64), cards-reverse/, guilds/,
+public/           Static assets: cards/, cards-thumbnails/, cards-reverse/, guilds/,
                   guilds-thumbnails/, clues/, backgrounds/, dashboard/, ico/
 styles/globals.css  CSS variables + the guild theme classes
 helpers/          XnConvert batch scripts (card → webp / thumbnails) and LLM prompt starters. Not code.
@@ -186,6 +186,14 @@ import { CardTier } from '@/functions/src/types/card';   // models/CardClue.ts, 
 ```
 
 (This works because `tsconfig.json` sets `baseUrl: "."` with `"@/*": ["./*"]`, so `@/` is the repo root.)
+
+⚠️ **`functions/src/actions/rankingOrder.ts` crosses that boundary with real RUNTIME code**, not just a
+type — it is the one ordering both worlds sort by (§7), so it is bundled into the browser. It therefore
+**must not import `firebase-admin`** (nor `firebase-functions/logger`; it logs with `console.warn`), and
+takes its timestamps as `unknown`, narrowed by a structural `{ toDate(): Date } | Date | number` duck-type —
+`updatedAt`/`scoreUpdatedAt` are `Timestamp | FieldValue | number` server-side and `Date` client-side, and
+`FieldValue` is assignable to neither. Type-only cross-imports like `CardTier` above get elided and are
+exempt; this one would not be. Any future shared runtime helper inherits the same rule.
 
 **Consequence for any new feature:** adding a field or an entity means editing *both* sides, plus the
 Firestore rules, plus the seed. Grep for every enumeration site before declaring done.
@@ -311,7 +319,7 @@ Roles (`Enum/UserRole.ts`): `user`, `admin`, `dashboard`.
 
 ## 7. Game mechanics
 
-**Pins are the 2026 collectible** (`functions/src/types/pin.ts`). Seven `PinType`s, each with its own collect
+**Pins are the 2026 collectible** (`functions/src/types/pin.ts`). Each `PinType` has its own collect
 flow, colour (`--color-pin-*`) and icon (`utils/getPinIcon.ts`):
 
 | Type | How it's collected | Entry point |
@@ -330,7 +338,7 @@ otherwise be brute-forceable across every pin. That holds only because every one
 10-char `[A-Z0-9]` string (`upsertPinHandle` enforces the same `CODE_PATTERN` across all of them, and their
 codes must not collide) — the length check runs *before* the query. Ghosts are deliberately **omitted from
 `PinTypeLegend`** (finding one is a surprise); geocaching is **shown** (players should know to look for caches),
-so the legend renders six of the seven — only `ghost` is filtered.
+so `ghost` is the only type the legend filters out.
 
 **"Enters a code" (`code` + `ghost` + `geocaching`) is `entersCode()` in `Enum/PinType.ts`** — the predicate
 that drives the code label, the `ABCDEFGHIJ` placeholder, `maxLength`, the 10-char submit gate and the camera
@@ -349,8 +357,8 @@ no inner-whitespace collapse. Author answers short, single-token and ASCII-safe.
 global, not per-pin. A wrong answer still burns the question (score 0) and still increments
 `amountOfAnsweredQuestions`. Shared by cards and pins.
 
-⚠️ **Every question in the seed is authored with the correct answer in slot `a` and `correct: 'a'`** — all
-132 of them. This is not a leak and must not be "fixed" by scattering correct answers across b/c/d:
+⚠️ **Every question in the seed is authored with the correct answer in slot `a` and `correct: 'a'`**, without
+exception. This is not a leak and must not be "fixed" by scattering correct answers across b/c/d:
 `components/collect/QuestionPinView.tsx` shuffles the four entries before rendering, and `correct` never
 leaves the server anyway (`questions/questions` has no client rule). Authoring the key anywhere but `a`
 buys nothing and breaks the one invariant that makes the pool skimmable. **There is no time limit on
@@ -368,6 +376,29 @@ the tick lands marginally early nothing is due and the round waits a full hour. 
 the only in-policy recovery if the cron misses; it **cannot** force a round closed early, so a
 `"Nothing to do, no rounds to finish."` toast is a normal result, not a failure. Its three return strings
 are deliberately **English** (admin-only, identical to the function logs) — do not translate them.
+
+⚠️ **The winners list and the live ranking are ONE ordering, and must stay one** (task #80). For a finished
+round `pages/ranking.tsx` renders both panels at once — *"Mistrzowie rundy"* (`winnersOnly`) and *"Ranking
+rundy"* — as two filters over the **same** sorted `users` array, so any disagreement is visible in a single
+glance next to a physical prize. The binding invariant:
+
+```
+users.filter(isVisibleInRound).slice(0, 3)  ===  users.filter(r => r.winnerInRound === round.uid)
+```
+
+Both sides therefore go through **`functions/src/actions/rankingOrder.ts`** — `orderRankingEntries`
+(score desc → `scoreUpdatedAt` asc, older score wins → `uid` asc) and `isVisibleInRound`, which doubles as
+the server's prize-eligibility filter so winners are picked from exactly the set the screen shows. The `uid`
+key exists so nothing ever falls back to Firestore map key order. **Never re-implement either on one side.**
+
+Three non-obvious consequences in `updateRoundsProcessor`:
+- It reads the round docs **inside** the transaction (`transaction.getAll`), for the read-set — the §12.2
+  rule. It stamps **only the `users.<uid>.winnerInRound` field path**; writing the record back would replay
+  the pre-close snapshot over a boundary award.
+- `crownedThisPass` — each closing round is judged against its own snapshot, so without a pass-level set two
+  rounds closing together crown the same player twice.
+- Propagation is **forward only**: a winner's stamp lands in every round ordered after the crowning one
+  (still-open *and* later-closing), never backward — a closed round's leaderboard is history.
 
 ### 7a. Retired mechanics — code still present, UI gone
 
@@ -661,9 +692,13 @@ Firestore transactions and the score fan-out — nothing is mocked.
   reproduce, and never assume either way without the falsification run.
 - The canonical test asserts the score is identical in all four denormalized places after a collect + answer.
   **Every new point-granting feature must extend this suite** (see the fan-out warning in §12.2).
-- Current suite (**119 tests across 10 files** — count with
-  `grep -h '^test(' functions/test/*.test.mjs | wc -l`): `scoring` (card fan-out), `rounds` (`winnerInRound`
-  propagation + the auth/admin gate on `updateRoundsHandle`), `award-concurrency` (overlapping same-user awards
+- ⚠️ **The suites share one emulator and each `beforeEach` wipes Firestore + Auth**, so they cannot run
+  concurrently — `functions/package.json`'s `test` script passes `--test-concurrency=1`. Hand-running
+  `node --test fileA fileB` drops that flag and produces spurious cross-file failures; pass one file, or use
+  `npm test` / `scripts/emu-test.sh`.
+- Current suite: `scoring` (card fan-out, plus the zero-point award leaving `scoreUpdatedAt` alone),
+  `rounds` (winner ordering + eligibility + the auth/admin gate on `updateRoundsHandle`), `award-concurrency`
+  (overlapping same-user awards
   grant an achievement bonus exactly once, and a double-fired answer awards once — the §12.2 read-set rule),
   `pins` (all three entry shapes, anti-bruteforce, dup guard, availability window, normalization,
   snapshot/secret-stripping), `admin-pins` (upsert/delete gates + validation, re-seed `collectedBy` preservation),
@@ -883,6 +918,18 @@ up is Firebase **Storage**, for photo uploads — see 12.4 — and only under ti
   aborting the whole award. `USER_COUNTER_DEFAULTS` is typed `Record<UserCounterKey, number>`, so a new
   counter without a default is a compile error — add every new counter to the union, `User`, *and* the
   defaults. Regression net: `functions/test/counters.test.mjs` (+ `seedLegacyUser` in `fixtures.mjs`).
+- ⚠️ **`user.scoreUpdatedAt` is the leaderboard's tie-break basis, and is NOT `updatedAt`** (task #80).
+  `updateRanking` stamps `updatedAt` on *every* write, and plenty of those change no score:
+  a wrong answer (`answerQuestionHandle` awards 0), `recheckAchievementsHandle` (calls
+  `awardPoints(…, 0, {}, [])` for **every player it repairs**), a zero-value pin, account creation.
+  Tie-breaking on that would let staying active — or an admin running a repair near a round close — silently
+  reorder who wins a prize. So `awardPoints` moves `scoreUpdatedAt` **only when `points + bonus !== 0`** (an
+  achievement bonus with no base points does count — the score really changed), setting it on the in-memory
+  user so `updateRanking` copies the same commit timestamp; `updateRanking` only ever **copies** it, never
+  stamps, so the two non-award callers carry it through untouched. It is a score **sibling** like
+  `pendingScore`, not a `UserCounterKey`, so `getCurrentUser` hydrates it separately (to `null`).
+  Records predating the field carry `null` and `orderRankingEntries` falls back to `updatedAt` for them,
+  self-correcting on that player's next scoring award.
 - Points are never awarded client-side. The callable that shipped is `functions/src/collectPinHandle.ts`,
   registered in `functions/src/index.ts`, exported through `utils/functions.ts` as `collectPinFunction`.
   Any further pin flow (talk feedback, #12) forks **it**, not `collectCardHandle`.
