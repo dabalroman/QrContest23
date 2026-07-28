@@ -41,6 +41,7 @@ export type User = {
     memberOf: GuildUid | null,
     winnerInRound: string | null
     updatedAt: Timestamp | FieldValue | number,
+    scoreUpdatedAt: Timestamp | FieldValue | number | null,
     lastGuildChangeAt: Timestamp | FieldValue | number,
 }
 

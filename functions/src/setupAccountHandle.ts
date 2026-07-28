@@ -77,6 +77,7 @@ export const setupAccountHandle = onCall(async (req): Promise<{ user: User }> =>
         memberOf: null,
         winnerInRound: null,
         updatedAt: FieldValue.serverTimestamp(),
+        scoreUpdatedAt: null,
         lastGuildChangeAt: new Date('2020/01/01') as any
     };
     

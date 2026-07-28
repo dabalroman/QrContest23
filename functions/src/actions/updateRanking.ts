@@ -24,7 +24,8 @@ export default function updateRanking(
                 amountOfCollectedPins: user.amountOfCollectedPins,
                 memberOf: user.memberOf,
                 winnerInRound: user.winnerInRound,
-                updatedAt: FieldValue.serverTimestamp()
+                updatedAt: FieldValue.serverTimestamp(),
+                scoreUpdatedAt: user.scoreUpdatedAt ?? null
             } as Partial<RankingRoundUser>
         }) as UpdateData<RankingRoundUsers>);
     });

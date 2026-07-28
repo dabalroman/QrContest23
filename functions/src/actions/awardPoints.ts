@@ -65,10 +65,21 @@ export default async function awardPoints(
         counterIncrements[key] = FieldValue.increment(counters[key] as number);
     });
 
+    // The leaderboard breaks a tie on the OLDER score, so its basis must move only when the score really
+    // changed. A wrong answer and recheckAchievementsHandle both come through here with a zero delta and
+    // must leave it alone - `updatedAt` below cannot serve, it marks every write. Set on the in-memory
+    // user too, so updateRanking's copy carries the same commit timestamp.
+    const scoreDelta = points + bonus;
+
+    if (scoreDelta !== 0) {
+        user.scoreUpdatedAt = FieldValue.serverTimestamp();
+    }
+
     // Single user-doc write: base points + achievement bonus + counters.
     transaction.update<User, User>(userRef, ({
-        score: FieldValue.increment(points + bonus),
+        score: FieldValue.increment(scoreDelta),
         ...counterIncrements,
+        ...(scoreDelta !== 0 ? {scoreUpdatedAt: FieldValue.serverTimestamp()} : {}),
         updatedAt: FieldValue.serverTimestamp()
     } as UpdateData<User>));
 

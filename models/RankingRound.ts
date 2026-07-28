@@ -2,6 +2,10 @@ import FirebaseModel from '@/models/FirebaseModel';
 import { DocumentSnapshot, SnapshotOptions } from '@firebase/firestore';
 import { Uid } from '@/types/global';
 import { GuildUid } from '@/models/Guild';
+import {
+    orderRankingEntries,
+    isVisibleInRound as isVisibleInRoundRule
+} from '@/functions/src/actions/rankingOrder';
 
 export type UserRankingRecord = {
     uid: Uid,
@@ -14,6 +18,8 @@ export type UserRankingRecord = {
     memberOf: GuildUid | null,
     winnerInRound: string | null,
     updatedAt: Date,
+    // Null on records written before the field existed; the ordering falls back to `updatedAt` there.
+    scoreUpdatedAt: Date | null,
 }
 
 export type GuildRankingRecord = {
@@ -61,7 +67,7 @@ export default class RankingRound extends FirebaseModel {
     }
 
     static isVisibleInRound (record: UserRankingRecord, roundUid: Uid): boolean {
-        return !record.winnerInRound || record.winnerInRound === roundUid;
+        return isVisibleInRoundRule(record, roundUid);
     }
 
     protected static fromFirestore (
@@ -86,28 +92,11 @@ export default class RankingRound extends FirebaseModel {
                     memberOf: record.memberOf,
                     score: record.score,
                     winnerInRound: record.winnerInRound,
-                    updatedAt: record.updatedAt.toDate()
+                    updatedAt: record.updatedAt.toDate(),
+                    scoreUpdatedAt: record.scoreUpdatedAt ? record.scoreUpdatedAt.toDate() : null
                 };
             })
-            .sort((a: UserRankingRecord, b: UserRankingRecord) => {
-                if (a.score > b.score) {
-                    return -1;
-                }
-
-                if (a.score < b.score) {
-                    return 1;
-                }
-
-                if (a.updatedAt > b.updatedAt) {
-                    return -1;
-                }
-
-                if (a.updatedAt < b.updatedAt) {
-                    return 1;
-                }
-
-                return 0;
-            });
+            .sort(orderRankingEntries);
 
         const guildEntries: GuildRankingRecord[] = Object.entries(data.guilds)
             .map(([uid, record]: [string, any]): GuildRankingRecord => {

@@ -11,6 +11,9 @@ export type RankingRoundUser = {
     memberOf: GuildUid | null,
     winnerInRound: string | null,
     updatedAt: Timestamp | FieldValue | number,
+    // Copied from User.scoreUpdatedAt - the tie-break basis, moved only by a real score change. See the
+    // comment there, and actions/rankingOrder.ts for the ordering that reads it.
+    scoreUpdatedAt: Timestamp | FieldValue | number | null,
 }
 
 export type RankingRoundGuild = {

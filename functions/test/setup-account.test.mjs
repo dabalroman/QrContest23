@@ -79,7 +79,10 @@ test('registration creates a complete user doc, username reservation and ranking
         role: 'user',
         isReturningPlayer: false,
         memberOf: null,
-        winnerInRound: null
+        winnerInRound: null,
+        // No score yet, so the leaderboard tie-break basis is unset - awardPoints stamps it on the first
+        // award that actually changes the score.
+        scoreUpdatedAt: null
     }, 'the persisted user doc');
 
     assert.ok(updatedAt instanceof Timestamp, 'updatedAt resolved to a real Timestamp');
@@ -179,7 +182,8 @@ test('the returning-player flag does not contaminate the rest of the user doc', 
         achievements: {},
         role: 'admin',
         memberOf: null,
-        winnerInRound: null
+        winnerInRound: null,
+        scoreUpdatedAt: null
     }, 'every other field, including the role, is unaffected by the flag');
 });
 

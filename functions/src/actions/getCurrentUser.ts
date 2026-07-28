@@ -5,7 +5,7 @@ import {DocumentData, DocumentReference, Transaction} from "firebase-admin/fires
 
 function hydrate(data: DocumentData): User {
     return {
-        pendingScore: 0, achievements: {}, collectedPinsByScope: {},
+        pendingScore: 0, achievements: {}, collectedPinsByScope: {}, scoreUpdatedAt: null,
         ...USER_COUNTER_DEFAULTS, ...data
     } as User;
 }
