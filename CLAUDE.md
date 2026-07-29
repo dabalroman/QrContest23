@@ -30,7 +30,9 @@ Auth (Google popup + email/password), Hosting with `frameworksBackend` (Next.js 
   client-side from `NEXT_PUBLIC_FIREBASE_REGION`. If those disagree every callable fails with a CORS/404.
 - ⚠️ **Off-season the project runs on Spark**, so Gen-2 callables 503, surfacing as *"CORS header … missing"*.
   Real cause is in `npx firebase functions:log` ("billing is disabled"). Fix = re-enable **Blaze**, no
-  redeploy. **Check billing before debugging CORS.**
+  redeploy. **Check billing before debugging CORS.** The restriction is on **Gen-2 callables only** — direct
+  admin-SDK reads of Firestore and Storage keep working on Spark within free quota, so `scripts/dump-prod.ts`
+  needs no billing flip.
 
 ---
 
@@ -552,6 +554,28 @@ new uids, replaces edited ones, and **preserves seed-only entries** (a hard `del
 propagate — retire via `isActive: false`). Output is uid-sorted, strips `collectedBy`, serializes availability
 `Timestamp`s, and **fails loud** on a missing required field or a duplicate code — an invariant
 `upsertPinHandle` only checks against *live* Firestore, so a merge can reintroduce it.
+
+**Prod archive (`scripts/dump-prod.ts`).** Read-only capture of the live project into the gitignored
+`./.prod-dump/<YYYY-MM-DD>/` — Firestore (recursive `listCollections()` walk, so the per-user
+`collectedPins`/`collectedCards`/`collectedQuestions` land in `firestore/users__*.json` without being named),
+every Storage object under `users/` **plus an orphan sweep**, `auth/users.json` and `logs/`. Timestamps
+serialize to `{ __ts__: millis, iso }`; anything unrecognized **throws** rather than dumping garbage.
+
+- ⚠️ **Requires a VIEWER-ONLY service account** (`roles/datastore.viewer` + `roles/storage.objectViewer`)
+  whose key lives **outside the working tree** — this repo is public, and the default Firebase Admin SDK key
+  carries full write access to the live game. Point `GOOGLE_APPLICATION_CREDENTIALS` at it; the script aborts
+  if it is unset. In the IAM picker only ***Storage Object Viewer*** works — *Storage Viewer*, *Storage Bucket
+  Viewer* and the Firebase-branded `firebasestorage.*` roles all 403 on `storage.objects.list`.
+- ⚠️ **It aborts if any `*_EMULATOR_HOST` is set.** `export-pins.ts` defaults `FIRESTORE_EMULATOR_HOST` when
+  unset, so an exported one would otherwise produce a confident, *empty* archive reported as success.
+- The auth and logs legs shell out to the CLI login, not the service account, and are deliberately
+  **non-fatal** — a stale `firebase login` must not throw away a finished Firestore + photo dump.
+- `functions:log` has no time filter, only `-n`, and Cloud Logging's `_Default` bucket retains **30 days**.
+  `meta.json` records the oldest entry actually captured; if it postdates the event, escalate `--log-lines` or
+  pull the rest via the Cloud Logging API with `roles/logging.viewer` added.
+- **`export-pins.ts --prod <dump-dir>`** rebuilds the seed from that archive instead of the emulator: a **full
+  replace, no merge**, because pins are authored in the live map editor so prod is their only source of truth.
+  Both guards still run; it still writes only the review copy.
 
 ### 9a. Testing (Cloud Functions, e2e)
 

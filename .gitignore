@@ -36,6 +36,8 @@ functions/firebase-debug.log
 .env.production
 .emulators
 .firebase
+# read-only prod archive (scripts/dump-prod.ts) — carries player emails and pin codes
+.prod-dump
 firebase-export-*
 pubsub-debug.log
 

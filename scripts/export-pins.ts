@@ -2,16 +2,13 @@
 // Merges the pins authored in the map editor (live emulator `pins` collection) with the existing seed and
 // writes a REVIEW COPY - functions/src/seeds/pinsSeed.generated.ts. It never touches the real pinsSeed.ts;
 // diff the copy and promote it by hand. Run via `npx tsx scripts/export-pins.ts` with `npm run emulators` up.
+// `--prod <dump-dir>` instead rebuilds the seed from a scripts/dump-prod.ts archive, FULL REPLACE, no merge.
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { Pin, PinType } from '../functions/src/types/pin';
-
-// Point the admin SDK at the local emulator BEFORE any Firestore call. Same port as firebase.json; the
-// project id is the real one `npm run emulators` uses (the demo-* id is a tests-only concern).
-process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:8080';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const seedRel = 'functions/src/seeds/pinsSeed.ts';
@@ -35,23 +32,24 @@ const REQUIRED_KEYS = [
     'withQuestion', 'availableFrom', 'availableTo', 'isActive', 'code'
 ];
 
-// The types the global scanner cross-looks-up by code (mirrors upsertPinHandle), so a code must be unique
-// across them - a duplicate makes which pin a printed QR collects a coin toss.
-const GLOBALLY_LOOKED_UP_TYPES: PinType[] = [PinType.CODE, PinType.GHOST];
+// The types the global scanner cross-looks-up by code (mirrors upsertPinHandle + collectPinHandle), so a
+// code must be unique across them - a duplicate makes which pin a printed QR collects a coin toss.
+const GLOBALLY_LOOKED_UP_TYPES: PinType[] = [PinType.CODE, PinType.GHOST, PinType.GEOCACHING];
 
 async function main(): Promise<void> {
-    const outRel = process.argv[2] ?? defaultOutRel;
+    const dumpDir = readFlag('--prod');
+    const outRel = positionalArg() ?? defaultOutRel;
     const outPath = path.resolve(repoRoot, outRel);
+
+    if (dumpDir !== null) {
+        await exportFromDump(dumpDir, outPath, outRel);
+        return;
+    }
 
     const existing = await loadExistingSeed();
     const existingByUid = new Map(existing.map((p) => [p.uid, p]));
 
-    initializeApp({ projectId: 'qrcontest2023' });
-    const snapshot = await getFirestore().collection('pins').get();
-    const live: Pin[] = snapshot.docs.map((doc) => {
-        const { collectedBy, ...rest } = doc.data() as Pin;
-        return { ...rest, uid: doc.id } as Pin;
-    });
+    const live = await readLivePins();
 
     const merged = new Map<string, Pin>(existingByUid);
     let created = 0;
@@ -84,6 +82,71 @@ async function main(): Promise<void> {
     console.log(`\nWrote review copy: ${outRel}`);
     console.log(`Review:  git diff --no-index ${seedRel} ${outRel}`);
     console.log('Then replace pinsSeed.ts manually if the diff looks right.');
+}
+
+async function readLivePins(): Promise<Pin[]> {
+    // Point the admin SDK at the local emulator BEFORE any Firestore call, and only on this path - the
+    // --prod branch must never inherit it. Same port as firebase.json; the project id is the real one
+    // `npm run emulators` uses (the demo-* id is a tests-only concern).
+    process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:8080';
+    initializeApp({ projectId: 'qrcontest2023' });
+    const snapshot = await getFirestore().collection('pins').get();
+    return snapshot.docs.map((doc) => {
+        const { collectedBy, ...rest } = doc.data() as Pin;
+        return { ...rest, uid: doc.id } as Pin;
+    });
+}
+
+// Rebuilds the seed from a scripts/dump-prod.ts archive. FULL REPLACE - prod is the source of truth for
+// pins (they are authored in the live map editor), so the local seed's history is deliberately dropped:
+// no loadExistingSeed, no merge. The hand-promote of the review copy is the only diff gate left.
+async function exportFromDump(dumpDir: string, outPath: string, outRel: string): Promise<void> {
+    const source = path.resolve(repoRoot, dumpDir, 'firestore', 'pins.json');
+    const raw = JSON.parse(await fs.readFile(source, 'utf8')) as Record<string, unknown>[];
+    const pins = raw
+        .map((record) => {
+            const { _id, _parentPath, collectedBy, ...rest } = record;
+            return { ...(reviveTimestamps(rest) as object), uid: _id } as Pin;
+        })
+        .sort((a, b) => a.uid.localeCompare(b.uid));
+
+    assertRequiredKeys(pins);
+    assertUniqueCodes(pins);
+
+    await fs.writeFile(outPath, render(pins), 'utf8');
+
+    console.log(`Rebuilt ${pins.length} pins from ${path.relative(repoRoot, source)} (full replace, no merge).`);
+    console.log(`\nWrote review copy: ${outRel}`);
+    console.log(`Review:  git diff --no-index ${seedRel} ${outRel}`);
+    console.log('Then replace pinsSeed.ts manually if the diff looks right.');
+}
+
+// dump-prod.ts writes every Timestamp as `{ __ts__: millis, iso }`; fromMillis restores it exactly.
+function reviveTimestamps(value: unknown): unknown {
+    if (Array.isArray(value)) {
+        return value.map(reviveTimestamps);
+    }
+    if (value && typeof value === 'object') {
+        const record = value as Record<string, unknown>;
+        if (typeof record.__ts__ === 'number') {
+            return Timestamp.fromMillis(record.__ts__);
+        }
+        return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, reviveTimestamps(v)]));
+    }
+    return value;
+}
+
+function readFlag(name: string): string | null {
+    const index = process.argv.indexOf(name);
+    return index === -1 ? null : (process.argv[index + 1] ?? null);
+}
+
+// The out path stays a bare positional, so `--prod <dir>` and its value must not be mistaken for one.
+function positionalArg(): string | null {
+    const args = process.argv.slice(2);
+    const index = args.indexOf('--prod');
+    const skipped = index === -1 ? [] : [index, index + 1];
+    return args.find((_, i) => !skipped.includes(i)) ?? null;
 }
 
 async function loadExistingSeed(): Promise<Pin[]> {
